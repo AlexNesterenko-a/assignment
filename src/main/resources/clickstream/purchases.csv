@@ -1,0 +1,5 @@
+purchaseId,purchaseTime,billingCost,isConfirmed
+p1,2019-01-01 0:01:05,100.5,TRUE
+p2,2019-01-01 0:03:10,200,TRUE
+p3,2019-01-01 1:12:15,300,FALSE
+p4,2019-01-01 1:13:05,50.2,TRUE
