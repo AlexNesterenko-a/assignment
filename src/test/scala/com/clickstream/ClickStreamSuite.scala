@@ -1,6 +1,5 @@
-package clickstream
+package com.clickstream
 
-import com.clickstream.ClickStream
 import org.junit.Test
 
 class ClickStreamSuite {
@@ -22,7 +21,7 @@ class ClickStreamSuite {
   private val topCampaignsDs = ClickStream.topCampaignsDataset(projectionDf2)
 
   // top channels results
-  private val topChannelsDf1 = ClickStream.topChannelEngagement(projectionDf2)
+  private val topChannelsDf1 = ClickStream.topChannelEngagementSql(projectionDf2)
   private val topChannelsDf2 = ClickStream.topChannelEngagementDataframe(projectionDf2)
 
   @Test def `check window functions and custom aggregator approaches produce same result`: Unit = {

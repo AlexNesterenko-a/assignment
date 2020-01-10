@@ -1,16 +1,15 @@
 package com.clickstream
 
-import java.sql.Timestamp
-
 import com.clickstream.ConfigHelper.getConfigOpt
+import com.clickstream.model.{EventTypes, ProjectionWithRevenue}
+import org.apache.spark.sql._
 import org.apache.spark.sql.expressions.{Aggregator, Window}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
-import org.apache.spark.sql._
 
 import scala.collection.mutable
 
-object ClickStream {
+object ClickStream extends ClickStreamInterface {
 
   val spark: SparkSession =
     SparkSession
@@ -38,7 +37,7 @@ object ClickStream {
     // calculate top campaigns/channels via sql and dataframe/dataset API
     topCampaigns(resultProjection)
     topCampaignsDataset(resultProjection)
-    topChannelEngagement(clickStreamDfFlattened)
+    topChannelEngagementSql(clickStreamDfFlattened)
     topChannelEngagementDataframe(clickStreamDfFlattened)
 
     spark.close()
@@ -207,7 +206,7 @@ object ClickStream {
   /**
    * top 3 channel engagement sql realization
    */
-  def topChannelEngagement(clickStreamFlattenDf: DataFrame): DataFrame = {
+  def topChannelEngagementSql(clickStreamFlattenDf: DataFrame): DataFrame = {
     clickStreamFlattenDf.createOrReplaceTempView("csFlat")
     val resultDf = spark.sql(
       s"""
@@ -242,23 +241,3 @@ object ClickStream {
   }
 
 }
-
-/**
- * User event types
- */
-object EventTypes {
-  val appOpen = "app_open"
-  val searchProduct = "search_product"
-  val viewProductDetails = "view_product_details"
-  val purchase = "purchase"
-  val appClose = "app_close"
-}
-
-case class ProjectionWithRevenue(purchaseId: String,
-                                 purchaseTime: Timestamp,
-                                 billingCost: Double,
-                                 isConfirmed: Boolean,
-                                 sessionId: String,
-                                 campaignId: String,
-                                 channelId: String,
-                                 revenue: Double)
