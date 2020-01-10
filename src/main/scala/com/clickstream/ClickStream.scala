@@ -2,10 +2,13 @@ package com.clickstream
 
 import java.sql.Timestamp
 
-import org.apache.spark.sql.expressions.Window
+import org.apache.spark.sql.expressions.{Aggregator, Window}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.{StringType, StructField, StructType}
-import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
+import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
+import org.apache.spark.sql.{DataFrame, Dataset, Encoder, Encoders, Row, SparkSession}
+import ConfigHelper.getConfigOpt
+
+import scala.collection.mutable
 
 object ClickStream {
 
@@ -13,8 +16,9 @@ object ClickStream {
   val spark: SparkSession =
     SparkSession
       .builder()
-      .appName("Clickstream")
-      .master("local")
+      .appName(getConfigOpt[String]("app.spark.name").getOrElse("Clickstream"))
+      .master(getConfigOpt[String]("app.spark.host").getOrElse("local"))
+      .config("spark.driver.memory", getConfigOpt[String]("driver-memory").getOrElse("1g"))
       .getOrCreate()
 
   // For implicit conversions like converting RDDs to DataFrames, call methods on dataframe columns and etc
@@ -30,11 +34,7 @@ object ClickStream {
 
     val clickStreamDfFlattened = flattenClickStreamInput(clickStreamDf)
 
-    // for access from plain sql
-    clickStreamDfFlattened.createOrReplaceTempView("clickStreamFlattened")
-
-    // build projection using sql
-    purchaseAttributesProjectionSql()
+    purchaseAttributesProjectionAggregator(clickStreamDfFlattened, purchaseDf)
 
     // build projection using dataframe API
     // cache result here, as it will be used by next operations
@@ -55,6 +55,9 @@ object ClickStream {
     spark.read.options(Map("header" -> "true", "inferSchema" -> "true")).option("escape", "\"").csv(path)
   }
 
+  /**
+   * Make flat structure by extracting nested json data
+   */
   def flattenClickStreamInput(clickStreamDf: DataFrame): DataFrame = {
     // describe schema for nested json (attributes)
     val appOpenJsonSchema = StructType(
@@ -69,49 +72,113 @@ object ClickStream {
       )
     )
 
-    // make flat structure by extracting nested fields
     val clickStreamDfFlattened = clickStreamDf
       .withColumn("purchase_struct", from_json($"attributes", purchaseJsonSchema))
       .withColumn("open_app", from_json($"attributes", appOpenJsonSchema))
       .withColumn("campaignId", $"open_app.campaign_id")
       .withColumn("channelId", $"open_app.channel_id")
-      .withColumn("purchase_id", $"purchase_struct.purchase_id")
+      .withColumn("purchaseId", $"purchase_struct.purchase_id")
       .drop("open_app", "attributes", "purchase_struct")
 
     clickStreamDfFlattened
   }
 
-  // DataFrame API realization
+  /**
+   * Building projection by using window functions
+   */
   def purchaseAttributesProjectionDf(clickStreamDfFlattened: DataFrame, purchaseDf: DataFrame): DataFrame = {
     val windowSpec = Window.partitionBy("userId").orderBy("eventTime")
+    val windowBySessionSpec = Window.partitionBy("userId", "sessionId")
 
     val clickStreamDfSessioned = clickStreamDfFlattened
-      .withColumn("purchaseToJoin", lead($"purchase_id", 3).over(windowSpec))
-      .where($"eventType" === EventTypes.appOpen)
+      .withColumn("prevEventTime", lag($"eventTime", 1).over(windowSpec))
+      .withColumn("diff", unix_timestamp($"eventTime") - unix_timestamp($"prevEventTime"))
+      .withColumn("initial", when($"diff".isNull || lag($"eventType", 1).over(windowSpec) === EventTypes.appClose, monotonically_increasing_id()))
+      .withColumn("sessionId", last($"initial", true).over(windowSpec))
+      .withColumn("curPurchase", last("purchaseId", true).over(windowBySessionSpec))
+      .select($"userId", $"curPurchase".as('purchaseId), $"sessionId", $"campaignId", $"channelId")
+      .where($"purchaseId".isNotNull && $"campaignId".isNotNull && $"channelId".isNotNull)
 
-    val joinedWithPurchases = clickStreamDfSessioned.join(purchaseDf, $"purchaseToJoin" === $"purchaseId", "inner").cache()
+    val joinedWithPurchases = clickStreamDfSessioned.join(purchaseDf, Seq("purchaseId"), "inner").cache()
 
-    val resultProjection = joinedWithPurchases.select($"purchaseId", $"purchaseTime", $"billingCost", $"isConfirmed", $"eventId".as('sessionId), $"campaignId", $"channelId")
+    val resultProjection = joinedWithPurchases.select($"purchaseId", $"purchaseTime", $"billingCost", $"isConfirmed", $"sessionId", $"campaignId", $"channelId")
 
     resultProjection.show()
     resultProjection
   }
 
-  // Plain SQL realization
-  def purchaseAttributesProjectionSql(): DataFrame = {
-    spark.sql(s"select csf.*, " +
-      s"lead(csf.purchase_id, 3) over (partition by csf.userId order by csf.eventTime) as purchaseToJoin " +
-      s"from clickStreamFlattened csf").where($"eventType" === EventTypes.appOpen)
-      .createOrReplaceTempView("clickStreamSessioned")
+  /**
+   * For aggregation: sessionId, purchaseId, campaignId, channelId
+   */
+  private type AggType = (Int, String, String, String)
 
-    val joinedWithPurchases = spark
-      .sql("select p.purchaseId, p.purchaseTime, p.billingCost, p.isConfirmed, css.eventId as sessionId, css.campaignId, css.channelId " +
-      "from clickStreamSessioned css " +
-      "inner join purchases p " +
-      "on css.purchaseToJoin = p.purchaseId")
+  /**
+   * Groups all needed data
+   * Obtains session id, purchases and etc info in 1 column
+   */
+  private class CustomAggregator extends Aggregator[Row, (String, AggType), String] with Serializable {
 
-    joinedWithPurchases.show()
-    joinedWithPurchases
+    private lazy val buffer = new mutable.HashMap[String, AggType]()
+    private var purchaseId = ""
+    private var campaignId = ""
+    private var channelId = ""
+
+    override def zero: (String, AggType) = ("", (-1, "", "", ""))
+
+    override def reduce(b: (String, AggType), a: Row): (String, AggType) = {
+      val key = a.getString(a.fieldIndex("purchaseId"))
+      val eventId = a.getString(a.fieldIndex("eventId"))
+      val sessionId = (a.getString(a.fieldIndex("userId")) + eventId.takeRight(1)).hashCode
+      val curCampaignId = a.getString(a.fieldIndex("campaignId"))
+      val curChannelId = a.getString(a.fieldIndex("channelId"))
+
+      if (key != null) purchaseId = key
+      if (curCampaignId != null) campaignId = curCampaignId
+      if (curChannelId != null) channelId = curChannelId
+
+      buffer.put(key, (sessionId, purchaseId, campaignId, channelId))
+      (key, buffer(key))
+    }
+
+
+    override def merge(buf1: (String, AggType), buf2: (String, AggType)): (String, AggType) = {
+      buf2
+    }
+
+    /**
+     * Form json string as aggregation output
+     */
+    override def finish(reduction: (String, AggType)): String = {
+      val value = reduction._2
+      s"""
+         |{"sessionId": ${value._1}, "purchaseId": "${value._2}", "campaignId": "${value._3}", "channelId": "${value._4}"}
+         """.stripMargin
+    }
+
+    override def outputEncoder: Encoder[String] = Encoders.STRING
+
+    override def bufferEncoder: Encoder[(String, AggType)] =
+      Encoders.tuple(Encoders.STRING, Encoders.tuple(Encoders.scalaInt, Encoders.STRING, Encoders.STRING, Encoders.STRING))
+  }
+
+  /**
+   * Building projection by using custom aggregator
+   */
+  def purchaseAttributesProjectionAggregator(clickStreamDf: DataFrame, purchaseDf: DataFrame): DataFrame = {
+    val aggDf = clickStreamDf
+      .groupBy("purchaseId").agg(new CustomAggregator().toColumn.as('agg))
+      .select(
+        $"purchaseId",
+        get_json_object($"agg", "$.sessionId").as('sessionId),
+        get_json_object($"agg", "$.campaignId").as('campaignId),
+        get_json_object($"agg", "$.channelId").as('channelId)
+      ).cache().filter($"purchaseId".isNotNull)
+
+    val resultProjection = aggDf.join(purchaseDf, Seq("purchaseId"), "inner")
+      .select($"purchaseId", $"purchaseTime", $"billingCost", $"isConfirmed", $"sessionId", $"campaignId", $"channelId")
+
+    resultProjection.show()
+    resultProjection
   }
 
   // top 10 campaigns by billing cost sql realization
