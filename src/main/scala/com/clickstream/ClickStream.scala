@@ -23,8 +23,8 @@ object ClickStream extends ClickStreamInterface {
 
   def main(args: Array[String]): Unit = {
     // read input data
-    val clickStreamDf = read("src/main/resources/clickstream/clickstream.csv")
-    val purchaseDf = read("src/main/resources/clickstream/purchases.csv")
+    val clickStreamDf = read("src/main/resources/com/clickstream/clickstream.csv")
+    val purchaseDf = read("src/main/resources/com/clickstream/purchases.csv")
 
     val clickStreamDfFlattened = flattenClickStreamInput(clickStreamDf)
 

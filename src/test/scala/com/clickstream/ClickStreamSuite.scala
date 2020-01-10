@@ -6,8 +6,8 @@ class ClickStreamSuite {
 
   import ClickStream.spark.implicits._
 
-  private val clickStreamDf = ClickStream.read("src/main/resources/clickstream/clickstream.csv")
-  private val purchaseDf = ClickStream.read("src/main/resources/clickstream/purchases.csv")
+  private val clickStreamDf = ClickStream.read("src/main/resources/com/clickstream/clickstream.csv")
+  private val purchaseDf = ClickStream.read("src/main/resources/com/clickstream/purchases.csv")
 
   private val clickStreamDfFlattened = ClickStream.flattenClickStreamInput(clickStreamDf)
 
