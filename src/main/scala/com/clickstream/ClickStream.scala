@@ -218,7 +218,7 @@ object ClickStream extends ClickStreamInterface {
          |  ),
          |nonZeroCount as (select distinct campaignId, channelId, cnt from channelCount where cnt > 0),
          |res as (select nonZeroCount.*, row_number() over (partition by nonZeroCount.campaignId order by nonZeroCount.cnt desc) rn from nonZeroCount)
-         |select res.campaignId, res.channelId from res where res.rn <= 3
+         |select res.campaignId, res.channelId from res where res.rn <= 3 order by res.campaignId
          |""".stripMargin
     )
 
@@ -237,6 +237,7 @@ object ClickStream extends ClickStreamInterface {
       .withColumn("rn", row_number().over(Window.partitionBy($"campaignId").orderBy($"cnt".desc)))
       .where($"rn" <= 3)
       .select("campaignId", "channelId")
+      .orderBy($"campaignId")
 
     resultDf
   }
