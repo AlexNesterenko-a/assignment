@@ -10,13 +10,7 @@ class ClickStreamSuite {
   private val clickStreamDf = ClickStream.read("src/main/resources/clickstream/clickstream.csv")
   private val purchaseDf = ClickStream.read("src/main/resources/clickstream/purchases.csv")
 
-  // for access from plain sql
-  purchaseDf.createOrReplaceTempView("purchases")
-
   private val clickStreamDfFlattened = ClickStream.flattenClickStreamInput(clickStreamDf)
-
-  // for access from plain sql
-  clickStreamDfFlattened.createOrReplaceTempView("clickStreamFlattened")
 
   // clickstream projection results
   private val projectionDf1 = ClickStream.purchaseAttributesProjectionAggregator(clickStreamDfFlattened, purchaseDf)
@@ -53,8 +47,6 @@ class ClickStreamSuite {
   @Test def `check top channels calculated correctly with spark sql and dataframe api`: Unit = {
     topChannelsDf1.show()
     topChannelsDf2.show()
-    val topChannelsDfRes1 = topChannelsDf1.collect().map(_.getString(0))
-    val topChannelsDfRes2 = topChannelsDf2.collect().map(_.getString(0))
-    assert(topChannelsDfRes1 sameElements topChannelsDfRes2)
+    assert(topChannelsDf1.except(topChannelsDf2).count == 0)
   }
 }

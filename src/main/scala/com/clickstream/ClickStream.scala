@@ -2,17 +2,16 @@ package com.clickstream
 
 import java.sql.Timestamp
 
+import com.clickstream.ConfigHelper.getConfigOpt
 import org.apache.spark.sql.expressions.{Aggregator, Window}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
-import org.apache.spark.sql.{DataFrame, Dataset, Encoder, Encoders, Row, SparkSession}
-import ConfigHelper.getConfigOpt
+import org.apache.spark.sql.types.{StringType, StructField, StructType}
+import org.apache.spark.sql._
 
 import scala.collection.mutable
 
 object ClickStream {
 
-  // spark session object
   val spark: SparkSession =
     SparkSession
       .builder()
@@ -21,16 +20,12 @@ object ClickStream {
       .config("spark.driver.memory", getConfigOpt[String]("driver-memory").getOrElse("1g"))
       .getOrCreate()
 
-  // For implicit conversions like converting RDDs to DataFrames, call methods on dataframe columns and etc
   import spark.implicits._
 
   def main(args: Array[String]): Unit = {
     // read input data
     val clickStreamDf = read("src/main/resources/clickstream/clickstream.csv")
     val purchaseDf = read("src/main/resources/clickstream/purchases.csv")
-
-    // for access from plain sql
-    purchaseDf.createOrReplaceTempView("purchases")
 
     val clickStreamDfFlattened = flattenClickStreamInput(clickStreamDf)
 
@@ -43,14 +38,16 @@ object ClickStream {
     // calculate top campaigns/channels via sql and dataframe/dataset API
     topCampaigns(resultProjection)
     topCampaignsDataset(resultProjection)
-    topChannelEngagement(resultProjection)
-    topChannelEngagementDataframe(resultProjection)
+    topChannelEngagement(clickStreamDfFlattened)
+    topChannelEngagementDataframe(clickStreamDfFlattened)
 
     spark.close()
   }
 
-  // get dataframe by path to csv file
-  // escape quotes to read json data normally
+  /**
+   * get dataframe by path to csv file
+   * escape quotes to read json data normally
+   */
   def read(path: String): DataFrame = {
     spark.read.options(Map("header" -> "true", "inferSchema" -> "true")).option("escape", "\"").csv(path)
   }
@@ -103,7 +100,6 @@ object ClickStream {
 
     val resultProjection = joinedWithPurchases.select($"purchaseId", $"purchaseTime", $"billingCost", $"isConfirmed", $"sessionId", $"campaignId", $"channelId")
 
-    resultProjection.show()
     resultProjection
   }
 
@@ -177,51 +173,79 @@ object ClickStream {
     val resultProjection = aggDf.join(purchaseDf, Seq("purchaseId"), "inner")
       .select($"purchaseId", $"purchaseTime", $"billingCost", $"isConfirmed", $"sessionId", $"campaignId", $"channelId")
 
-    resultProjection.show()
     resultProjection
   }
 
-  // top 10 campaigns by billing cost sql realization
   def topCampaigns(projectionDf: DataFrame): DataFrame = {
     projectionDf.createOrReplaceTempView("projection")
-    val resultDf = spark.sql("select p.campaignId from projection p order by p.billingCost limit 10")
+    val resultDf = spark.sql(
+      s"""
+         |with projectionWithRevenue as
+         |  (select
+         |    p.*, sum(p.billingCost) over (partition by p.campaignId) as revenue
+         |   from projection p
+         |  )
+         |select pr.campaignId from projectionWithRevenue pr order by pr.revenue desc limit 10
+         |""".stripMargin
+    )
 
-    resultDf.show()
     resultDf
   }
 
-  // top 10 campaigns by billing cost dataset realization
   def topCampaignsDataset(projectionDf: DataFrame): Dataset[String] = {
-    val projectionDs = projectionDf.as[Projection]
-    val resultDs = projectionDs.orderBy($"billingCost".desc).map(_.campaignId).limit(10)
+    val ds = projectionDf
+      .withColumn("revenue", sum($"billingCost").over(Window.partitionBy($"campaignId")).as('revenue))
+      .orderBy($"revenue".desc)
+      .as[ProjectionWithRevenue]
+      .limit(10)
 
-    resultDs.show()
+    val resultDs = ds.map(_.campaignId).limit(10)
+
     resultDs
   }
 
-  // top 3 channel engagement sql realization
-  def topChannelEngagement(projectionDf: DataFrame): DataFrame = {
-    projectionDf.createOrReplaceTempView("projection")
-    val resultDf = spark.sql("select p.channelId from projection p group by p.channelId order by count(p.sessionId) limit 3")
+  /**
+   * top 3 channel engagement sql realization
+   */
+  def topChannelEngagement(clickStreamFlattenDf: DataFrame): DataFrame = {
+    clickStreamFlattenDf.createOrReplaceTempView("csFlat")
+    val resultDf = spark.sql(
+      s"""
+         |with channelCount as
+         |  (
+         |    select csf.*, count(csf.channelId) over (partition by csf.campaignId) as cnt
+         |    from csFlat csf
+         |  ),
+         |nonZeroCount as (select distinct campaignId, channelId, cnt from channelCount where cnt > 0),
+         |res as (select nonZeroCount.*, row_number() over (partition by nonZeroCount.campaignId order by nonZeroCount.cnt desc) rn from nonZeroCount)
+         |select res.campaignId, res.channelId from res where res.rn <= 3
+         |""".stripMargin
+    )
 
-    resultDf.show()
     resultDf
   }
 
-  // top 3 channel engagement dataframe realization
-  def topChannelEngagementDataframe(projectionDf: DataFrame): DataFrame = {
-    val resultDf = projectionDf
-      .groupBy($"channelId").agg(count($"sessionId").as('sessionCount))
-      .orderBy($"sessionCount".desc)
-      .select("channelId").limit(3)
+  /**
+   * top 3 channel engagement dataframe realization
+   */
+  def topChannelEngagementDataframe(clickStreamFlattenDf: DataFrame): DataFrame = {
+    val resultDf = clickStreamFlattenDf
+      .withColumn("cnt", count($"channelId").over(Window.partitionBy($"campaignId")))
+      .select("campaignId", "channelId", "cnt")
+      .where($"cnt" > 0)
+      .distinct()
+      .withColumn("rn", row_number().over(Window.partitionBy($"campaignId").orderBy($"cnt".desc)))
+      .where($"rn" <= 3)
+      .select("campaignId", "channelId")
 
-    resultDf.show()
     resultDf
   }
 
 }
 
-// User event types
+/**
+ * User event types
+ */
 object EventTypes {
   val appOpen = "app_open"
   val searchProduct = "search_product"
@@ -230,11 +254,11 @@ object EventTypes {
   val appClose = "app_close"
 }
 
-// Model for projection
-case class Projection(purchaseId: String,
-                      purchaseTime: Timestamp,
-                      billingCost: Double,
-                      isConfirmed: Boolean,
-                      sessionId: String,
-                      campaignId: String,
-                      channelId: String)
+case class ProjectionWithRevenue(purchaseId: String,
+                                 purchaseTime: Timestamp,
+                                 billingCost: Double,
+                                 isConfirmed: Boolean,
+                                 sessionId: String,
+                                 campaignId: String,
+                                 channelId: String,
+                                 revenue: Double)
