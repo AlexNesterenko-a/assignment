@@ -15,7 +15,7 @@ object ClickStream {
   val spark: SparkSession =
     SparkSession
       .builder()
-      .appName(getConfigOpt[String]("app.spark.name").getOrElse("Clickstream"))
+      .appName("Clickstream")
       .master(getConfigOpt[String]("app.spark.host").getOrElse("local"))
       .config("spark.driver.memory", getConfigOpt[String]("driver-memory").getOrElse("1g"))
       .getOrCreate()
