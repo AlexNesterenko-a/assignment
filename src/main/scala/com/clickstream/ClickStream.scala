@@ -16,7 +16,9 @@ object ClickStream extends ClickStreamInterface {
       .builder()
       .appName("Clickstream")
       .master(getConfigOpt[String]("app.spark.host").getOrElse("local"))
-      .config("spark.driver.memory", getConfigOpt[String]("driver-memory").getOrElse("1g"))
+      .config("spark.driver.memory", getConfigOpt[String]("app.spark.driver-memory").getOrElse("1g"))
+      .config("spark.cores.max", getConfigOpt[Int]("app.spark.max-cores").getOrElse(4))
+      .config("spark.executor.cores", getConfigOpt[Int]("app.spark.executor-cores").getOrElse(1))
       .getOrCreate()
 
   import spark.implicits._
@@ -196,7 +198,6 @@ object ClickStream extends ClickStreamInterface {
       .withColumn("revenue", sum($"billingCost").over(Window.partitionBy($"campaignId")).as('revenue))
       .orderBy($"revenue".desc)
       .as[ProjectionWithRevenue]
-      .limit(10)
 
     val resultDs = ds.map(_.campaignId).limit(10)
 
