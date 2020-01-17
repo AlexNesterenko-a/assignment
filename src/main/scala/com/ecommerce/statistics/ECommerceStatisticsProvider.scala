@@ -52,7 +52,7 @@ class ECommerceStatisticsProvider(spark: SparkSession) {
         .otherwise("more than 5 mins")
       )
       .groupBy(category, userDurationCategory)
-      .agg(count("*"))
+      .agg(count("*").as('cnt))
   }
 
   /**
