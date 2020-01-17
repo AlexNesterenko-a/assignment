@@ -1,0 +1,5 @@
+category,product,userId,eventTime,eventType
+mobile phones,iPhone X,user 300,2018-03-01 12:05:03,view description
+mobile phones,iPhone X,user 300,2018-03-01 12:05:20,add to bucket
+notebooks,MacBook Pro 13,user 200,2018-03-01 12:17:56,add to bucket
+notebooks,MacBook Air,user 300,2018-03-01 12:20:10,dislike

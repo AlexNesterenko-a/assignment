@@ -1,0 +1,8 @@
+category,product,userId,eventTime,eventType
+books,Scala for Dummies,user 100,2018-03-01 12:00:02,view description
+books,Scala for Dummies,user 100,2018-03-01 12:01:40,like
+books,Scala for Dummies,user 100,2018-03-01 12:01:50,check status
+books,Java for Dummies,user 100,2018-03-01 12:02:14,view description
+books,Java for Dummies,user 100,2018-03-01 12:02:45,dislike
+books,Java for Dummies,user 100,2018-03-01 12:02:50,close description
+books,Scala for Dummies,user 100,2018-03-01 12:04:30,view description
