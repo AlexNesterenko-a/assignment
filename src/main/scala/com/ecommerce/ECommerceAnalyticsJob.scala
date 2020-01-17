@@ -28,10 +28,13 @@ object ECommerceAnalyticsJob extends SessionProvider {
       .csv(getConfigOpt[String]("app.source.path").getOrElse(""))
 
     val ecommerceSessionedDf = enrichedWithSessions(ecommerceDf).cache()
-    enrichedWithSessionsAggr(ecommerceDf)
-    medianSessionDuration(ecommerceSessionedDf)
-    userGroupsBySessionDuration(ecommerceSessionedDf)
-    topProductsRankingInEachCat(ecommerceDf)
+
+    ecommerceSessionedDf.show()
+
+    enrichedWithSessionsAggr(ecommerceDf).show()
+    medianSessionDuration(ecommerceSessionedDf).show()
+    userGroupsBySessionDuration(ecommerceSessionedDf).show()
+    topProductsRankingInEachCat(ecommerceDf).show()
 
     spark.close()
   }
