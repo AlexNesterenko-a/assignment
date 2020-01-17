@@ -4,6 +4,9 @@ ECommerce Analytics
 These analytics are build from input data sample located as csv file in resources folder.
 
 The goal is to enrich incoming data by emitting different sessions based on users, categories and time spent
+Enriched dataset is equal to raw input with extra columns added:
+
+**sessionId** (UUID), **sessionStartTime** (timestamp), **sessionEndTime** (timestamp)
 
 After enrichment the following statistics are computed:
 
