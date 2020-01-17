@@ -1,4 +1,4 @@
-package com.clickstream
+package com.ecommerce.utils
 
 import com.typesafe.config.{Config, ConfigFactory}
 
