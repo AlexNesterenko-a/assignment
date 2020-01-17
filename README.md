@@ -1,20 +1,24 @@
-Marketing Analytics
+ECommerce Analytics
 ===================
 
-This app builds purchases attribution projection.
+These analytics are build from input data sample located as csv file in resources folder.
 
-This projection is build from input data samples located as csv files in resources folder.
+The goal is to enrich incoming data by emitting different sessions based on users, categories and time spent
 
-The goal is to match actual purchases with click stream data from mobile app.
-We assume that user session starts with app_open event and ends with app_close event,
-so each purchase is associated with no more than one session.
-There could be sessions without purchases as normal.
+After enrichment the following statistics are computed:
 
-Top campaigns and top channels are calculated based on aforesaid projection.
+1) Median session duration for each category
+2) For each category find # of unique users spending less than 1 min, 1 to 5 mins and more than 5 mins
+3) Finding top n products ranked by time spent by users on product pages
 
-Each calculation is done by both plain sql and DataFrame/Dataset API.
+Enrichment is implemented in 2 ways:
+* Spark DataFrame API window functions approach
+* Spark [user defined aggregate functions](https://spark.apache.org/docs/latest/api/java/org/apache/spark/sql/expressions/UserDefinedAggregateFunction.html)
 
-Unit tests check whether results of both calculations for each task are equal.
+Statistics calculations are implemented with Spark DataFrame API and Spark SQL approaches
+
+Unit tests implemented to check whether produced results are correct based on
+reduced input samples and matching with precalculated results on these chunks.
 
 By default app is running in Spark standalone mode. Number of cores engaged and driver max RAM can be specified in
 config file, default: 4 cores, 2GB RAM
