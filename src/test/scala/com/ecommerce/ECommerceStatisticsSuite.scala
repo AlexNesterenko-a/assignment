@@ -22,15 +22,15 @@ class ECommerceStatisticsSuite {
 
   private val ecommerceSessionEnricher = new SessionEnricher()
 
-  private val ecommerceSampleDf = spark
-    .read
-    .option("header", "true")
-    .schema(ECommerceSchema.inputSchema)
-    .csv("src/test/resources/com/ecommerce/shortened_input_sample_stat.csv").cache()
-
-  private val ecommerceSessionedDf = ecommerceSessionEnricher.enrich(spark, ecommerceSampleDf).cache()
-
   @Test def `check median duration calculated correctly`: Unit = {
+
+    val ecommerceSampleDf = spark
+      .read
+      .option("header", "true")
+      .schema(ECommerceSchema.inputSchema)
+      .csv("src/test/resources/com/ecommerce/shortened_input_sample_stat.csv")
+
+    val ecommerceSessionedDf = ecommerceSessionEnricher.enrich(spark, ecommerceSampleDf)
 
     val medSessionDurationDf = statisticProvider.findMedianSessionDuration(ecommerceSessionedDf)
 
@@ -50,6 +50,14 @@ class ECommerceStatisticsSuite {
 
   @Test def `check user events are distributed by groups correctly`: Unit = {
 
+    val ecommerceSampleDf = spark
+      .read
+      .option("header", "true")
+      .schema(ECommerceSchema.inputSchema)
+      .csv("src/test/resources/com/ecommerce/shortened_input_sample_groups.csv")
+
+    val ecommerceSessionedDf = ecommerceSessionEnricher.enrich(spark, ecommerceSampleDf)
+
     val groupedDf = statisticProvider.userGroupsBySessionDuration(ecommerceSessionedDf)
 
     val actualResult = groupedDf.collect().map { r =>
@@ -58,9 +66,10 @@ class ECommerceStatisticsSuite {
 
     val expectedResult = Set(
       ("mobile phones", "less than 1 min", 2L),
-      ("books", "1 to 5 mins", 4L),
+      ("books", "1 to 5 mins", 1L),
       ("notebooks", "1 to 5 mins", 1L),
-      ("books", "less than 1 min", 1L)
+      ("books", "less than 1 min", 2L),
+      ("books", "more than 5 mins", 2L)
     )
 
     assert(actualResult.equals(expectedResult))

@@ -1,0 +1,21 @@
+category,product,userId,eventTime,eventType
+mobile phones,iPhone X,user 300,2018-03-01 12:05:03,view description
+mobile phones,iPhone X,user 400,2018-03-01 12:10:20,add to bucket
+notebooks,MacBook Pro 13,user 300,2018-03-01 12:17:56,add to bucket
+notebooks,MacBook Air,user 300,2018-03-01 12:20:10,dislike
+books,Scala for Dummies,user 100,2018-03-01 12:00:02,view description
+books,Scala for Dummies,user 100,2018-03-01 12:01:40,like
+books,Scala for Dummies,user 100,2018-03-01 12:01:50,check status
+books,Java for Dummies,user 100,2018-03-01 12:22:16,dislike
+books,Java for Dummies,user 500,2018-03-01 12:22:14,view description
+books,Java for Dummies,user 500,2018-03-01 12:22:20,close description
+books,Scala for Dummies,user 500,2018-03-01 12:24:30,view description
+books,Java for Dummies,user 200,2018-03-01 12:32:10,close description
+books,Scala for Dummies,user 200,2018-03-01 12:32:30,view description
+books,Scala for Dummies,user 100,2018-03-01 13:00:04,view description
+books,Scala for Dummies,user 400,2018-03-01 13:01:42,like
+books,Scala for Dummies,user 100,2018-03-01 13:21:50,check status
+books,Scala for Dummies,user 300,2018-03-01 14:00:00,like
+books,Scala for Dummies,user 400,2018-03-01 14:01:47,check status
+books,Scala for Dummies,user 400,2018-03-01 14:06:58,check status
+books,Scala for Dummies,user 400,2018-03-01 14:08:37,check status

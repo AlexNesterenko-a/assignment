@@ -41,11 +41,11 @@ class ECommerceStatisticsProvider(spark: SparkSession) {
     import com.ecommerce.model.DurationConstraints._
 
     sessionedDf
-      .groupBy(userId, category, sessionId)
+      .groupBy(userId, category)
       .agg((unix_timestamp(max($"sessionEndTime")) - unix_timestamp(min($"sessionStartTime"))).as(duration))
-      .select(category, userId, duration, sessionId)
+      .select(category, userId, duration)
       .distinct()
-      .groupBy(userId, category, sessionId).agg(sum(duration).as(duration))
+      .groupBy(userId, category).agg(sum(duration).as(duration))
       .withColumn(userDurationCategory,
         when($"duration" < oneMinute, "less than 1 min")
         .when($"duration".between(oneMinute, fiveMinutes), "1 to 5 mins")
